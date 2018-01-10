@@ -46,9 +46,19 @@ def ocr(addr, imgf):
 	rs = con.recv()
 	return rs.decode("utf-8", "ignore")
 
-def getPage(wd):
+def getHeader(urlstr):
+	def getHost(urlstr):
+		ind = urlstr.find("://")
+		if ind >= 0:
+			tmp = urlstr[ind + 3:]
+		else:
+			tmp = urlstr
+		ind = tmp.find("/")
+		if ind > 0:
+			tmp = tmp[:ind]
+		return tmp
 	header = {
-	"Host":"www.sogou.com",
+	"Host":getHost(urlstr),
 	"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.108 Safari/537.36",
 	"DNT":"1",
 	"Connection":"keep-alive",
@@ -56,7 +66,11 @@ def getPage(wd):
 	"Accept-Encoding":"gzip, deflate, br",
 	"Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8"
 	}
-	req = urllib2.Request("https://www.sogou.com/web?query="+quote(wd.encode("utf-8")),headers=header)
+	return header
+
+def getPage(urlstr):
+	header = getHeader(urlstr)
+	req = urllib2.Request(urlstr, headers=header)
 	r = urllib2.urlopen(req)
 	rs = u""
 	if r.info().get('Content-Encoding')=='gzip':
@@ -69,15 +83,44 @@ def getPage(wd):
 	r.close()
 	return rs.decode("utf-8")
 
-def getCount(wd):
+def getSougouPage(wd):
+	return getPage("https://www.sogou.com/web?query="+quote(wd.encode("utf-8")))
+
+def getSougouCount(wd):
 	try:
-		page = getPage(wd)
+		page = getSougouPage(wd)
 		page = page[page.find(u"搜狗已为您找到")+8:]
 		page = page[:page.find(u"条相关结果")]
 		rs = int(page.replace(",", ""))
 	except:
 		rs = 0
+	return rs + 1
+
+def getKBPage(wd):
+	def ready(strin):
+		tmp = strin.split()
+		rs = []
+		for tmpu in tmp:
+			if tmpu:
+				rs.append(tmpu)
+		return "+".join(rs)
+	return getPage("http://47.100.22.113:20013/?inpage=1&p="+quote(ready(wd).encode("utf-8")))
+
+def getKBCount(wd):
+	try:
+		page = getKBPage(wd)
+		page = page[page.rfind(u"<div class=\"container\">"):]
+		page = page[page.find("Output:"):]
+		page = page[page.find("<br/><br/>")+10:]
+		page = page[:page.find(" ")]
+		rs = float(page)
+	except:
+		rs = 0.0
 	return rs
+
+def getCount(wd):
+	#return getSougouCount(wd)
+	return getKBCount(wd)
 
 def cleanQ(strin, trimHead = True):
 	if trimHead and len(strin)>1 and (strin[0].lower() in ["a", "b", "c", "d"]):
@@ -125,8 +168,8 @@ def getAnswer(q, t):
 	for tu in t:
 		qr = q+" "+tu
 		print("Query "+str(curid)+" is "+qr)
-		curs = float(getCount(qr))/float(getCount(tu))
-		#curs = getCount(qr)
+		#curs = float(getCount(qr))/float(getCount(tu))
+		curs = getCount(qr)
 		print(">>Score of candidate "+str(curid)+": "+ str(curs))
 		if curs > maxscore:
 			maxscore = curs
@@ -183,7 +226,7 @@ def testPage():
 		f.write(getPage(u"百度云"))
 
 def testCount():
-	print(getCount(u"百度云"))
+	print(getCount(u"第一届奥斯卡 1981"))
 
 if __name__ == "__main__":
 	main()
